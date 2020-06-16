@@ -391,12 +391,18 @@ StateChange   lda SWCHA
 
 CheckLeft     bit StickState
               bvs CheckRight
+              lda #2
+              cmp Direction
+              beq WaitOver
               lda #1
               sta Direction
               jmp WaitOver
 
 CheckRight    bit StickState
               bmi CheckUP
+              lda #1
+              cmp Direction
+              beq WaitOver
               lda #2
               sta Direction
               jmp WaitOver
@@ -404,6 +410,9 @@ CheckRight    bit StickState
 CheckUP       lda #$10
               bit StickState
               bne CheckDOWN
+              lda #4
+              cmp Direction
+              beq WaitOver
               lda #3
               sta Direction
               jmp WaitOver
@@ -411,6 +420,9 @@ CheckUP       lda #$10
 CheckDOWN     lda #$20
               bit StickState
               bne WaitOver
+              lda #3
+              cmp Direction
+              beq WaitOver
               lda #4
               sta Direction
 

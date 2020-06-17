@@ -14,13 +14,10 @@ MotionDelay = 10
 
 DisplayPos    ds 1 ; 1 byte frame counter
 
-DisplayNum    ds 1
-Score = DisplayNum
+Score         ds 1
+HiScore       ds 1
 
 StickState    ds 1
-
-SpritePtr0    ds 2
-SpritePtr1    ds 2
 
 DisplayLeft  ds 17
 DisplayRight ds 17
@@ -43,6 +40,11 @@ PF0b_Temp    ds 1
 PF1b_Temp    ds 1
 Mask_Temp    ds 1
 
+SpritePtr0 = PF2a_Current
+SpritePtr1 = PF1b_Current
+SpritePtr2 = PF2a_Temp
+SpritePtr3 = PF1b_Temp
+
 Temp = PF2a_Current
 STACK_POS = Mask_Temp
 
@@ -58,19 +60,13 @@ Reset      CLEAN_START
         ldx #STACK_POS
         txs
 
-        lda #>Char0
-        sta SpritePtr0+1
-        sta SpritePtr1+1
         lda SWCHA
         sta StickState
-        lda #69
+        lda #44
         sta DisplayPos
 
         lda #$98
         sta COLUPF
-
-        lda #$10
-        sta NUSIZ0
 
         lda #1
         sta VDELP1
@@ -82,28 +78,28 @@ Reset      CLEAN_START
         sta DisplayLeft+16
         sta DisplayRight+16
 
-        lda #$12
-        sta Body
-        lda #$22
-        sta Body+1
-        lda #$32
-        sta Body+2
+Restart     lda #$12
+            sta Body
+            lda #$22
+            sta Body+1
+            lda #$32
+            sta Body+2
 
-        lda #2
-        sta HeadLoc
-        lda #3
-        sta FreeLoc
+            lda #2
+            sta HeadLoc
+            lda #3
+            sta FreeLoc
 
-        ldx #1
-        ldy #2
-        jsr SetPlayField
-        inx
-        jsr SetPlayField
-        inx
-        jsr SetPlayField
+            ldx #1
+            ldy #2
+            jsr SetPlayField
+            inx
+            jsr SetPlayField
+            inx
+            jsr SetPlayField
 
-        lda #MotionDelay
-        sta MotionCount
+            lda #MotionDelay
+            sta MotionCount
 
 StartOfFrame
 
@@ -116,11 +112,9 @@ StartOfFrame
         ldx #31
         jsr WaitForLines
 
-        lda #$FF
-        sta PF2a_Current
-        sta PF0b_Current
-        lda #$F8
-        sta PF1b_Current
+        lda #2
+        sta NUSIZ0
+        sta NUSIZ1
         sta WSYNC
 
         ; 3 scan line to position sprite
@@ -139,17 +133,32 @@ StartOfFrame
         sta WSYNC
         sta HMOVE
 
-        ; 1 scan line to choose sprite
-        lda DisplayNum
+        ; 1 scan line to choose sprites
+        lda #>Char0
+        sta SpritePtr0+1
+        sta SpritePtr1+1
+        sta SpritePtr2+1
+        sta SpritePtr3+1
+        lda Score
         and #$0F
         asl
         asl
         asl
         sta SpritePtr0
-        lda DisplayNum
+        lda Score
         and #$F0
         lsr
         sta SpritePtr1
+        lda HiScore
+        and #$0F
+        asl
+        asl
+        asl
+        sta SpritePtr2
+        lda HiScore
+        and #$F0
+        lsr
+        sta SpritePtr3
         sta WSYNC
 
         lda #0
@@ -160,16 +169,21 @@ StartOfFrame
         ; 8 scan lines to draw sprite
               ldy #7
               ldx #$C2
-DrawSprite    lda (SpritePtr1),y
+DrawSprite    lda (SpritePtr3),y
               sta GRP1
               sta WSYNC
-              lda (SpritePtr0),y
+              lda (SpritePtr2),y
               sta GRP0
               stx COLUP1
               stx COLUP0
+              lda (SpritePtr1),y
+              sta GRP1
+              lda (SpritePtr0),y
               inx
               inx
               dey
+              SLEEP 10
+              sta GRP0
               bpl DrawSprite
 
               ; 3 scan lines to position fruit
@@ -191,8 +205,14 @@ DrawSprite    lda (SpritePtr1),y
               jsr WaitForLines
 
               ldx #0
-              lda #$F0
-              sta Mask_Current
+              stx Mask_Current
+              stx NUSIZ0
+              stx NUSIZ1
+              lda #$FF
+              sta PF2a_Current
+              sta PF0b_Current
+              lda #$F8
+              sta PF1b_Current
 Line1         sta WSYNC
               lda #0
               sta PF0
@@ -354,7 +374,7 @@ Done          sta WSYNC
               stx PF1
               stx PF2
               ; 20 scan lines of nothing
-              ldx #19
+              ldx #20
               jsr WaitForLines
 
               lda #%01000010
@@ -378,7 +398,20 @@ CheckStick    lda SWCHA
               beq WaitOver
               jsr Move
               bvc WaitOver
-              jmp Reset
+
+              lda Score             ; Game Over!
+              cmp HiScore
+              bcc NoHiScore
+              sta HiScore
+NoHiScore     ldx #16
+              lda #0
+              sta Score
+              sta Direction
+ResetPF       dex
+              sta DisplayLeft,x
+              sta DisplayRight,x
+              bne ResetPF
+              jmp Restart
 
 StateChange   lda SWCHA
               sta StickState

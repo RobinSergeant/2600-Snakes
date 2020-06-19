@@ -392,26 +392,18 @@ CheckStick    lda SWCHA
 
               dec MotionCount
               bne WaitOver
-              lda #MotionDelay
+Timeout       lda #MotionDelay
               sta MotionCount
               lda Direction
               beq WaitOver
               jsr Move
-              bvc WaitOver
+              bvc CheckLen
+              jmp GameOver
 
-              lda Score             ; Game Over!
-              cmp HiScore
-              bcc NoHiScore
-              sta HiScore
-NoHiScore     ldx #16
-              lda #0
-              sta Score
-              sta Direction
-ResetPF       dex
-              sta DisplayLeft,x
-              sta DisplayRight,x
-              bne ResetPF
-              jmp Restart
+CheckLen      lda FreeLoc
+              bne WaitOver
+              sta Direction     ; Win!
+              beq WaitOver
 
 StateChange   lda SWCHA
               sta StickState
@@ -537,21 +529,38 @@ Move SUBROUTINE move
             clv
             rts
 .grow       inc HeadLoc
-            inc FreeLoc
-            lda Body,x
-            jsr GetRandom
-            inx
-            sta Body,x
             sed
             clc
             lda Score
             adc #1
             cld
             sta Score
-            clv
+            inc FreeLoc
+            beq .maxlen
+            lda Body,x
+            jsr GetRandom
+            inx
+            sta Body,x
+.maxlen     clv
             rts
 .collision  bit .return             ; set overflow flag
 .return     rts
+
+
+GameOver SUBROUTINE
+            lda Score             ; Game Over!
+            cmp HiScore
+            bcc .NoHiScore
+            sta HiScore
+.NoHiScore  ldx #16
+            lda #0
+            sta Score
+            sta Direction
+.ResetPF    dex
+            sta DisplayLeft,x
+            sta DisplayRight,x
+            bne .ResetPF
+            jmp Restart
 
 
 ; UpdatePlayField routine

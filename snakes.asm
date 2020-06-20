@@ -11,6 +11,7 @@
       ORG $80
 
 MotionDelay = 10
+MunchDelay = 20
 
 DisplayPos    ds 1 ; 1 byte frame counter
 
@@ -29,6 +30,8 @@ MotionCount ds 1
 HeadLoc     ds 1
 FreeLoc     ds 1
 TailLoc = Body
+
+FaceSpritePtr   ds 2
 
 PF2a_Current  ds 1
 PF0b_Current  ds 1
@@ -80,6 +83,11 @@ Reset      CLEAN_START
         sta DisplayLeft+16
         sta DisplayRight+16
 
+        lda #>Char0
+        sta FaceSpritePtr+1
+        lda #<Face
+        sta FaceSpritePtr
+
 Restart     lda #$12
             sta Body
             lda #$22
@@ -97,8 +105,6 @@ Restart     lda #$12
             jsr SetPlayField
             inx
             jsr SetPlayField
-            ;inx
-            ;jsr SetPlayField
 
             lda #MotionDelay
             sta MotionCount
@@ -217,6 +223,7 @@ DrawSprite    lda (SpritePtr3),y
               jsr WaitForLines
 
               ldx #0
+              ldy #0
               stx Mask_Current
               stx Fruit_Current
               stx NUSIZ0
@@ -235,7 +242,7 @@ Line1         sta WSYNC
               sta PF1
               lda colors          ; 4
               sta COLUP0          ; 3
-              lda face            ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -264,7 +271,7 @@ Line2         sta WSYNC
               sta COLUP0          ; 3
               lda Fruit_Current   ; 3
               sta GRP1            ; 3 = 14
-              nop
+              ldy #2
               lda PF2a_Current
               sta PF2
               lda PF0b_Current
@@ -278,7 +285,7 @@ Line2         sta WSYNC
               lsr                 ; 2
               lsr                 ; 2
               lsr                 ; 2
-              tay                 ; 2 = 14
+              sta PF1b_Temp
 
 Line3         sta WSYNC
               lda #0
@@ -287,7 +294,7 @@ Line3         sta WSYNC
               sta PF1
               lda colors+2        ; 4
               sta COLUP0          ; 3
-              lda face+2          ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -298,21 +305,23 @@ Line3         sta WSYNC
               sta PF1
               lda 0
               sta PF2
+              ldy PF1b_Temp       ; 3
               lda PFData,y        ; 4
               sta PF1b_Temp       ; 3
               ldy HeadLoc         ; 3
               lda Body,y          ; 4
               and #$0F            ; 2
-              sta Mask_Temp       ; 3 = 19
+              sta Mask_Temp       ; 3 = 22
+              ldy #3
 
-Line4         sta WSYNC
+Line4         ;sta WSYNC
               lda #0
               sta PF0
               lda #1
               sta PF1
               lda colors+3        ; 4
               sta COLUP0          ; 3
-              lda face+3          ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -336,7 +345,7 @@ Line5         sta WSYNC
               sta PF1
               lda colors+4        ; 4
               sta COLUP0          ; 3
-              lda face+4          ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -351,6 +360,7 @@ Line5         sta WSYNC
               lda Body,y          ; 4
               and #$0F            ; 2
               sta Fruit_Temp      ; 3
+              ldy #5
 
 Line6         sta WSYNC
               lda #0
@@ -359,7 +369,7 @@ Line6         sta WSYNC
               sta PF1
               lda colors+5        ; 4
               sta COLUP0          ; 3
-              lda face+5          ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -376,6 +386,7 @@ Line6         sta WSYNC
 SetFruit      sta Fruit_Temp
               lda 0
               sta GRP1
+              ldy #6
 
 Line7         sta WSYNC
               lda #0
@@ -384,7 +395,7 @@ Line7         sta WSYNC
               sta PF1
               lda colors+6        ; 4
               sta COLUP0          ; 3
-              lda face+6          ; 4
+              lda (FaceSpritePtr),y
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -396,6 +407,7 @@ Line7         sta WSYNC
               lda 0
               sta PF2
               inx
+              ldy #0
               lda Fruit_Temp
               sta Fruit_Current
 
@@ -457,6 +469,8 @@ Timeout       lda #MotionDelay
               sta MotionCount
               lda Direction
               beq WaitOver
+              lda #<Face
+              sta FaceSpritePtr
               jsr Move
               bvc CheckLen
               jmp GameOver
@@ -606,6 +620,10 @@ Move SUBROUTINE move
             jsr GetRandom
             inx
             sta Body,x
+            lda #<FaceClose
+            sta FaceSpritePtr
+            lda #MunchDelay
+            sta MotionCount
             clv
             rts
 .collision  bit .return             ; set overflow flag
@@ -725,12 +743,11 @@ Char7    .byte $00,$20,$20,$20,$10,$08,$04,$7C
 Char8    .byte $00,$38,$44,$44,$38,$44,$44,$38
 Char9    .byte $00,$70,$08,$04,$3C,$44,$44,$38
 
-;fruit    .byte %00000000,%01100000,%11110000,%11110000,%11110000,%01100000,%00000000
-;fruit    .byte %11110000,%11110000,%01100000,%11110000,%11110000,%10010000,%11110000
-face     .byte %11110000,%11110000,%01100000,%01100000,%11110000,%10010000,%11110000
+Face        .byte %11110000,%11110000,%01100000,%01100000,%11110000,%10010000,%11110000
+FaceClose   .byte %11110000,%11110000,%01100000,%01100000,%11110000,%11110000,%11110000
+;FaceUp      .byte %11110000,%11110000,%10010000,%11110000,%01100000,%01100000,%11110000
 
 colors   .byte $1E,$2E,$3E,$4E,$5E,$6E,$7E,$8E
-;colors   .byte $2C,$2C,$2C,$2C,$2C,$2C,$2C,$2C
 
 PFData   .byte %00001000,%10001000,%01001000,%11001000,%00101000,%10101000,%01101000,%11101000,%00011000,%10011000,%01011000,%11011000,%00111000,%10111000,%01111000,%11111000
 

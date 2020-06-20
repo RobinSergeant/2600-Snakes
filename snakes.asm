@@ -34,11 +34,13 @@ PF2a_Current  ds 1
 PF0b_Current  ds 1
 PF1b_Current  ds 1
 Mask_Current  ds 1
+Fruit_Current ds 1
 
 PF2a_Temp    ds 1
 PF0b_Temp    ds 1
 PF1b_Temp    ds 1
 Mask_Temp    ds 1
+Fruit_Temp   ds 1
 
 SpritePtr0 = PF2a_Current
 SpritePtr1 = PF1b_Current
@@ -46,7 +48,7 @@ SpritePtr2 = PF2a_Temp
 SpritePtr3 = PF1b_Temp
 
 Temp = PF2a_Current
-STACK_POS = Mask_Temp
+STACK_POS = Fruit_Temp
 
 Body        ds #$FF - STACK_POS
 
@@ -72,7 +74,7 @@ Reset      CLEAN_START
         sta VDELP1
 
         lda #4
-        sta CTRLPF
+        ;sta CTRLPF
 
         lda #$FF
         sta DisplayLeft+16
@@ -95,8 +97,8 @@ Restart     lda #$12
             jsr SetPlayField
             inx
             jsr SetPlayField
-            inx
-            jsr SetPlayField
+            ;inx
+            ;jsr SetPlayField
 
             lda #MotionDelay
             sta MotionCount
@@ -186,9 +188,19 @@ DrawSprite    lda (SpritePtr3),y
               sta GRP0
               bpl DrawSprite
 
-              ; 3 scan lines to position fruit
+              ; 5 scan lines to position game sprites
               sta WSYNC
               ldx FreeLoc
+              lda Body,x
+              and #$F0
+              lsr
+              lsr
+              clc
+              adc #48
+              ldx #1
+              jsr SetHorizPos
+              sta WSYNC
+              ldx HeadLoc
               lda Body,x
               and #$F0
               lsr
@@ -200,12 +212,13 @@ DrawSprite    lda (SpritePtr3),y
               sta WSYNC
               sta HMOVE
 
-         ; 17 scan lines of nothing
-              ldx #17
+         ; 15 scan lines of nothing
+              ldx #15
               jsr WaitForLines
 
               ldx #0
               stx Mask_Current
+              stx Fruit_Current
               stx NUSIZ0
               stx NUSIZ1
               lda #$FF
@@ -213,6 +226,8 @@ DrawSprite    lda (SpritePtr3),y
               sta PF0b_Current
               lda #$F8
               sta PF1b_Current
+              lda #$0E
+              sta COLUP1
 Line1         sta WSYNC
               lda #0
               sta PF0
@@ -220,7 +235,7 @@ Line1         sta WSYNC
               sta PF1
               lda colors          ; 4
               sta COLUP0          ; 3
-              lda fruit           ; 4
+              lda face            ; 4
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -247,9 +262,9 @@ Line2         sta WSYNC
               sta PF1
               lda colors+1        ; 4
               sta COLUP0          ; 3
-              lda fruit+1         ; 4
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
+              lda Fruit_Current   ; 3
+              sta GRP1            ; 3 = 14
+              nop
               lda PF2a_Current
               sta PF2
               lda PF0b_Current
@@ -272,7 +287,7 @@ Line3         sta WSYNC
               sta PF1
               lda colors+2        ; 4
               sta COLUP0          ; 3
-              lda fruit+2         ; 4
+              lda face+2          ; 4
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -285,8 +300,8 @@ Line3         sta WSYNC
               sta PF2
               lda PFData,y        ; 4
               sta PF1b_Temp       ; 3
-              ldy FreeLoc         ; 3
-              lda Body,y            ; 4
+              ldy HeadLoc         ; 3
+              lda Body,y          ; 4
               and #$0F            ; 2
               sta Mask_Temp       ; 3 = 19
 
@@ -297,7 +312,7 @@ Line4         sta WSYNC
               sta PF1
               lda colors+3        ; 4
               sta COLUP0          ; 3
-              lda fruit+3         ; 4
+              lda face+3          ; 4
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -314,14 +329,14 @@ Line4         sta WSYNC
 SetMask       sta Mask_Temp
               ldy #4
 
-Lines5to7     sta WSYNC
+Line5         sta WSYNC
               lda #0
               sta PF0
               lda #1
               sta PF1
-              lda colors,y        ; 4
+              lda colors+4        ; 4
               sta COLUP0          ; 3
-              lda fruit,y         ; 4
+              lda face+4          ; 4
               and Mask_Current    ; 3
               sta GRP0            ; 3 = 17
               lda PF2a_Current
@@ -332,11 +347,57 @@ Lines5to7     sta WSYNC
               sta PF1
               lda 0
               sta PF2
-              iny
-              cpy #7
-              bne Lines5to7
+              ldy FreeLoc         ; 3
+              lda Body,y          ; 4
+              and #$0F            ; 2
+              sta Fruit_Temp      ; 3
+
+Line6         sta WSYNC
+              lda #0
+              sta PF0
+              lda #1
+              sta PF1
+              lda colors+5        ; 4
+              sta COLUP0          ; 3
+              lda face+5          ; 4
+              and Mask_Current    ; 3
+              sta GRP0            ; 3 = 17
+              lda PF2a_Current
+              sta PF2
+              lda PF0b_Current
+              sta PF0
+              lda PF1b_Current
+              sta PF1
+              lda 0
+              sta PF2
+              cpx Fruit_Temp       ; 3
+              bne SetFruit
+              lda #%01100000
+SetFruit      sta Fruit_Temp
+              lda 0
+              sta GRP1
+
+Line7         sta WSYNC
+              lda #0
+              sta PF0
+              lda #1
+              sta PF1
+              lda colors+6        ; 4
+              sta COLUP0          ; 3
+              lda face+6          ; 4
+              and Mask_Current    ; 3
+              sta GRP0            ; 3 = 17
+              lda PF2a_Current
+              sta PF2
+              lda PF0b_Current
+              sta PF0
+              lda PF1b_Current
+              sta PF1
+              lda 0
+              sta PF2
               inx
-              sta GRP0
+              lda Fruit_Temp
+              sta Fruit_Current
 
 Line8         sta WSYNC
               lda #0
@@ -400,8 +461,10 @@ Timeout       lda #MotionDelay
               bvc CheckLen
               jmp GameOver
 
-CheckLen      lda FreeLoc
+CheckLen      lda Score
+              cmp #$70
               bne WaitOver
+              lda #0
               sta Direction     ; Win!
               beq WaitOver
 
@@ -489,6 +552,8 @@ Move SUBROUTINE move
             ldx HeadLoc             ; Find location of head
             lda Body,x
             jsr UnpackA
+            jsr SetPlayField
+            jsr UnpackA
             lda Direction
 .left       cmp #1
             bne .right
@@ -511,6 +576,7 @@ Move SUBROUTINE move
             beq .collision
 .continue   jsr PackXY
             jsr SetPlayField
+            jsr ClearPlayField
             bvs .collision
             ldx FreeLoc
             cmp Body,x
@@ -536,12 +602,11 @@ Move SUBROUTINE move
             cld
             sta Score
             inc FreeLoc
-            beq .maxlen
             lda Body,x
             jsr GetRandom
             inx
             sta Body,x
-.maxlen     clv
+            clv
             rts
 .collision  bit .return             ; set overflow flag
 .return     rts
@@ -660,9 +725,12 @@ Char7    .byte $00,$20,$20,$20,$10,$08,$04,$7C
 Char8    .byte $00,$38,$44,$44,$38,$44,$44,$38
 Char9    .byte $00,$70,$08,$04,$3C,$44,$44,$38
 
-fruit    .byte %00000000,%01100000,%11110000,%11110000,%11110000,%11110000,%01100000
+;fruit    .byte %00000000,%01100000,%11110000,%11110000,%11110000,%01100000,%00000000
+;fruit    .byte %11110000,%11110000,%01100000,%11110000,%11110000,%10010000,%11110000
+face     .byte %11110000,%11110000,%01100000,%01100000,%11110000,%10010000,%11110000
 
 colors   .byte $1E,$2E,$3E,$4E,$5E,$6E,$7E,$8E
+;colors   .byte $2C,$2C,$2C,$2C,$2C,$2C,$2C,$2C
 
 PFData   .byte %00001000,%10001000,%01001000,%11001000,%00101000,%10101000,%01101000,%11101000,%00011000,%10011000,%01011000,%11011000,%00111000,%10111000,%01111000,%11111000
 

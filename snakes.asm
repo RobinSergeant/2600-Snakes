@@ -14,8 +14,10 @@ MotionDelay = 10
 MunchDelay = 20
 DisplayPos = 44
 
-Score         ds 1
-HiScore       ds 1
+Score       ds 1
+HiScore     ds 1
+
+Sound       ds 1
 
 DisplayLeft  ds 17
 DisplayRight ds 17
@@ -67,6 +69,9 @@ Reset      CLEAN_START
         lda #1
         sta VDELP1
 
+        lda #5
+        sta AUDV0
+
         ;lda #4
         ;sta CTRLPF
 
@@ -108,12 +113,10 @@ StartOfFrame
 
         ; 36 scanlines of vertical blank...
 
-        ldx #30
+        ldx #31
         jsr WaitForLines
 
-        sta WSYNC
-        ; 3 scan line to position sprite
-        cld
+        ; 2 scan lines to position sprite
         lda #DisplayPos
         ldx #1
         jsr SetHorizPos
@@ -447,7 +450,17 @@ Done          sta WSYNC
               ; 30 scanlines of overscan...
               TIMER_SETUP 30
 
-              jsr CheckJoystick
+              ldx Sound
+              lda Effects,x
+              sta AUDC0
+              beq CheckStick
+              inx
+              lda Effects,x
+              sta AUDF0
+              inc Sound
+              inc Sound
+
+CheckStick    jsr CheckJoystick
               cpx Direction
               beq Motion
 
@@ -487,29 +500,6 @@ WaitForLines SUBROUTINE
               sta WSYNC
               bne WaitForLines
               rts
-
-; SetHorizPos routine
-; A = X coordinate
-; X = player number (0 or 1)
-SetHorizPos SUBROUTINE
-  cmp #3
-  bcc FindPos
-  sec
-  sbc #3
-FindPos
-  sta WSYNC  ; start a new line
-  sec    ; set carry flag
-DivideLoop
-  sbc #15    ; subtract 15
-  bcs DivideLoop  ; branch until negative
-  eor #7    ; calculate fine offset
-  asl
-  asl
-  asl
-  asl
-  sta HMP0,x  ; set fine offset
-  sta RESP0,x  ; fix coarse position
-  rts    ; return to caller
 
 CheckJoystick SUBROUTINE
             ldx Direction
@@ -602,6 +592,8 @@ Move SUBROUTINE move
             sta FaceSpritePtr
             lda #MunchDelay         ; increase motion delay to make visible
             sta MotionCount
+            lda #ChimeIndex         ; trigger sound effect
+            sta Sound
             clv
             rts
 .collision  bit .return             ; set overflow flag
@@ -609,6 +601,8 @@ Move SUBROUTINE move
 
 
 GameOver SUBROUTINE
+            lda CrashIndex
+            sta Sound
             lda Score             ; Game Over!
             cmp HiScore
             bcc .NoHiScore
@@ -703,6 +697,29 @@ GetRandom SUBROUTINE
             eor #$D4
 .NoEor      rts
 
+; SetHorizPos routine
+; A = X coordinate
+; X = player number (0 or 1)
+SetHorizPos SUBROUTINE
+  cmp #3
+  bcc FindPos
+  sec
+  sbc #3
+FindPos
+  sta WSYNC  ; start a new line
+  sec    ; set carry flag
+DivideLoop
+  sbc #15    ; subtract 15
+  bcs DivideLoop  ; branch until negative
+  eor #7    ; calculate fine offset
+  asl
+  asl
+  asl
+  asl
+  sta HMP0,x  ; set fine offset
+  sta RESP0,x  ; fix coarse position
+  rts    ; return to caller
+
             ALIGN  256
 
 SpriteData
@@ -720,9 +737,15 @@ Char9    .byte $00,$70,$08,$04,$3C,$44,$44,$38
 
 Face        .byte %11110000,%11110000,%01100000,%01100000,%11110000,%10010000,%11110000
 FaceClose   .byte %11110000,%11110000,%01100000,%01100000,%11110000,%11110000,%11110000
-;FaceUp      .byte %11110000,%11110000,%10010000,%11110000,%01100000,%01100000,%11110000
 
-colors   .byte $1E,$2E,$3E,$4E,$5E,$6E,$7E,$8E
+colors      .byte $1E,$2E,$3E,$4E,$5E,$6E,$7E,$8E
+
+Effects
+ChimeEffect .byte 6,4,6,3,6,2,6,1,6,0,0
+CrashEffect .byte 8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,0
+
+ChimeIndex = ChimeEffect - Effects
+CrashIndex = CrashEffect - Effects
 
 PFData   .byte %00001000,%10001000,%01001000,%11001000,%00101000,%10101000,%01101000,%11101000,%00011000,%10011000,%01011000,%11011000,%00111000,%10111000,%01111000,%11111000
 

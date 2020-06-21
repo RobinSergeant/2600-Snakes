@@ -12,13 +12,10 @@
 
 MotionDelay = 10
 MunchDelay = 20
-
-DisplayPos    ds 1 ; 1 byte frame counter
+DisplayPos = 44
 
 Score         ds 1
 HiScore       ds 1
-
-StickState    ds 1
 
 DisplayLeft  ds 17
 DisplayRight ds 17
@@ -43,7 +40,6 @@ PF2a_Temp    ds 1
 PF0b_Temp    ds 1
 PF1b_Temp    ds 1
 Mask_Temp    ds 1
-Fruit_Temp   ds 1
 
 SpritePtr0 = PF2a_Current
 SpritePtr1 = PF1b_Current
@@ -51,7 +47,7 @@ SpritePtr2 = PF2a_Temp
 SpritePtr3 = PF1b_Temp
 
 Temp = PF2a_Current
-STACK_POS = Fruit_Temp
+STACK_POS = Mask_Temp
 
 Body        ds #$FF - STACK_POS
 
@@ -65,18 +61,13 @@ Reset      CLEAN_START
         ldx #STACK_POS
         txs
 
-        lda SWCHA
-        sta StickState
-        lda #44
-        sta DisplayPos
-
         lda #$98
         sta COLUPF
 
         lda #1
         sta VDELP1
 
-        lda #4
+        ;lda #4
         ;sta CTRLPF
 
         lda #$FF
@@ -102,9 +93,9 @@ Restart     lda #$12
 
             ldx #1
             ldy #2
-            jsr SetPlayField
+            jsr UpdatePlayField
             inx
-            jsr SetPlayField
+            jsr UpdatePlayField
 
             lda #MotionDelay
             sta MotionCount
@@ -117,21 +108,17 @@ StartOfFrame
 
         ; 36 scanlines of vertical blank...
 
-        ldx #31
+        ldx #30
         jsr WaitForLines
 
-        lda #2
-        sta NUSIZ0
-        sta NUSIZ1
         sta WSYNC
-
         ; 3 scan line to position sprite
         cld
-        lda DisplayPos
+        lda #DisplayPos
         ldx #1
         jsr SetHorizPos
         sta WSYNC
-        lda DisplayPos
+        lda #DisplayPos
         clc
         adc #6
         ldx #0
@@ -177,6 +164,9 @@ StartOfFrame
         ; 8 scan lines to draw sprite
               ldy #7
               ldx #$C2
+              lda #2
+              sta NUSIZ0
+              sta NUSIZ1
 DrawSprite    lda (SpritePtr3),y
               sta GRP1
               sta WSYNC
@@ -359,7 +349,7 @@ Line5         sta WSYNC
               ldy FreeLoc         ; 3
               lda Body,y          ; 4
               and #$0F            ; 2
-              sta Fruit_Temp      ; 3
+              sta Fruit_Current      ; 3
               ldy #5
 
 Line6         sta WSYNC
@@ -380,10 +370,10 @@ Line6         sta WSYNC
               sta PF1
               lda 0
               sta PF2
-              cpx Fruit_Temp       ; 3
+              cpx Fruit_Current       ; 3
               bne SetFruit
               lda #%01100000
-SetFruit      sta Fruit_Temp
+SetFruit      sta Fruit_Current
               lda 0
               sta GRP1
               ldy #6
@@ -408,8 +398,6 @@ Line7         sta WSYNC
               sta PF2
               inx
               ldy #0
-              lda Fruit_Temp
-              sta Fruit_Current
 
 Line8         sta WSYNC
               lda #0
@@ -452,18 +440,27 @@ Done          sta WSYNC
 
               lda #%01000010
 
-              sta VBLANK                     ; end of screen - enter blanking
+              sta VBLANK            ; end of screen - enter blanking
 
 
 
               ; 30 scanlines of overscan...
               TIMER_SETUP 30
 
-CheckStick    lda SWCHA
-              eor StickState
-              bne StateChange
+              jsr CheckJoystick
+              cpx Direction
+              beq Motion
 
-              dec MotionCount
+              lda Direction
+              bne SetDirection  ; not the first joystick push
+              lda MotionCount   ; use MotionCount as seed
+              jsr GetRandom     ; get random location of fruit
+              ldy FreeLoc
+              sta Body,y
+
+SetDirection  stx Direction
+
+Motion        dec MotionCount
               bne WaitOver
 Timeout       lda #MotionDelay
               sta MotionCount
@@ -480,53 +477,6 @@ CheckLen      lda Score
               bne WaitOver
               lda #0
               sta Direction     ; Win!
-              beq WaitOver
-
-StateChange   lda SWCHA
-              sta StickState
-              lda Direction
-              bne CheckLeft     ; not the first joystick push
-              lda MotionCount   ; use MotionCount as seed
-              jsr GetRandom     ; get random location of fruit
-              ldx FreeLoc
-              sta Body,x
-
-CheckLeft     bit StickState
-              bvs CheckRight
-              lda #2
-              cmp Direction
-              beq WaitOver
-              lda #1
-              sta Direction
-              jmp WaitOver
-
-CheckRight    bit StickState
-              bmi CheckUP
-              lda #1
-              cmp Direction
-              beq WaitOver
-              lda #2
-              sta Direction
-              jmp WaitOver
-
-CheckUP       lda #$10
-              bit StickState
-              bne CheckDOWN
-              lda #4
-              cmp Direction
-              beq WaitOver
-              lda #3
-              sta Direction
-              jmp WaitOver
-
-CheckDOWN     lda #$20
-              bit StickState
-              bne WaitOver
-              lda #3
-              cmp Direction
-              beq WaitOver
-              lda #4
-              sta Direction
 
 WaitOver      TIMER_WAIT
               jmp StartOfFrame
@@ -561,14 +511,43 @@ DivideLoop
   sta RESP0,x  ; fix coarse position
   rts    ; return to caller
 
+CheckJoystick SUBROUTINE
+            ldx Direction
+            bit SWCHA
+            bvs CheckRight
+            cpx #2
+            beq .return
+            ldx #1
+            rts
+CheckRight  bit SWCHA
+            bmi CheckUP
+            cpx #1
+            beq .return
+            ldx #2
+            rts
+CheckUP     lda #$10
+            bit SWCHA
+            bne CheckDOWN
+            cpx #4
+            beq .return
+            ldx #3
+            rts
+CheckDOWN   lda #$20
+            bit SWCHA
+            bne .return
+            cpx #3
+            beq .return
+            ldx #4
+.return     rts
+
 ; Move snake
 Move SUBROUTINE move
             ldx HeadLoc             ; Find location of head
             lda Body,x
             jsr UnpackA
-            jsr SetPlayField
+            jsr UpdatePlayField     ; Put body segment at old head location
             jsr UnpackA
-            lda Direction
+            lda Direction           ; Use direction to calculate new head loc
 .left       cmp #1
             bne .right
             dex
@@ -589,40 +568,39 @@ Move SUBROUTINE move
             cpy #16
             beq .collision
 .continue   jsr PackXY
-            jsr SetPlayField
-            jsr ClearPlayField
+            jsr CheckPlayField      ; check that new location is empty
             bvs .collision
             ldx FreeLoc
-            cmp Body,x
-            beq .grow
+            cmp Body,x              ; check if new location contains fruit
+            beq .grow               ; if so grow rather than move
             pha
             lda TailLoc
             jsr UnpackA
-            jsr ClearPlayField     ; clear PF at tail
+            jsr UpdatePlayField     ; clear PF at tail
             ldx HeadLoc
             pla
-.reorder    ldy Body,x
+.reorder    ldy Body,x              ; shift snake backwards overwriting tail
             sta Body,x
             tya
             dex
             bpl .reorder
             clv
             rts
-.grow       inc HeadLoc
-            sed
+.grow       sed                     ; increase score using BCD addition
             clc
             lda Score
             adc #1
             cld
             sta Score
+            inc HeadLoc             ; increment head and free locations
             inc FreeLoc
-            lda Body,x
+            lda Body,x              ; Generate next random number in sequence
             jsr GetRandom
             inx
-            sta Body,x
-            lda #<FaceClose
+            sta Body,x              ; store at new free location
+            lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
-            lda #MunchDelay
+            lda #MunchDelay         ; increase motion delay to make visible
             sta MotionCount
             clv
             rts
@@ -646,8 +624,8 @@ GameOver SUBROUTINE
             jmp Restart
 
 
-; UpdatePlayField routine
-SetPlayField SUBROUTINE
+; CheckPlayField routine
+CheckPlayField SUBROUTINE
             pha
             cpx #8
             bcc .continue
@@ -664,9 +642,6 @@ SetPlayField SUBROUTINE
 .continue   lda BitMask,x
             and DisplayLeft,y   ; is bit already set?
             bne .collision
-            lda BitMask,x
-            eor DisplayLeft,y   ; set bit
-            sta DisplayLeft,y
             pla
             clv
             rts
@@ -675,7 +650,7 @@ SetPlayField SUBROUTINE
 .return     rts
 
 ; UpdatePlayField routine
-ClearPlayField SUBROUTINE
+UpdatePlayField SUBROUTINE
             pha
             cpx #8
             bcc .continue

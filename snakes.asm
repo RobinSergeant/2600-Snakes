@@ -10,9 +10,9 @@
 
       ORG $80
 
-MotionDelay = 10
-MunchDelay = 20
-DisplayPos = 44
+MOTION_DELAY = 10
+MUNCH_DELAY = 20
+DISPLAY_POS = [160 - 43] / 2
 
 Score       ds 1
 HiScore     ds 1
@@ -52,6 +52,9 @@ Temp = PF2a_Current
 STACK_POS = Mask_Temp
 
 Body        ds #$FF - STACK_POS
+
+MAX_SCORE SET $FF - Body - 3
+MAX_SCORE SET MAX_SCORE - MAX_SCORE % 5
 
             SEG
 
@@ -102,7 +105,7 @@ Restart     lda #$12
             inx
             jsr UpdatePlayField
 
-            lda #MotionDelay
+            lda #MOTION_DELAY
             sta MotionCount
 
 StartOfFrame
@@ -113,15 +116,15 @@ StartOfFrame
 
         ; 36 scanlines of vertical blank...
 
-        ldx #31
+        ldx #32
         jsr WaitForLines
 
         ; 2 scan lines to position sprite
-        lda #DisplayPos
+        lda #DISPLAY_POS
         ldx #1
         jsr SetHorizPos
         sta WSYNC
-        lda #DisplayPos
+        lda #DISPLAY_POS
         clc
         adc #6
         ldx #0
@@ -131,38 +134,42 @@ StartOfFrame
         sta WSYNC
         sta HMOVE
 
-        ; 1 scan line to choose sprites
-        lda #>Char0
-        sta SpritePtr0+1
-        sta SpritePtr1+1
-        sta SpritePtr2+1
-        sta SpritePtr3+1
-        lda Score
-        and #$0F
-        asl
-        asl
-        asl
-        sta SpritePtr0
-        lda Score
-        and #$F0
-        lsr
-        sta SpritePtr1
-        lda HiScore
-        and #$0F
-        asl
-        asl
-        asl
-        sta SpritePtr2
-        lda HiScore
-        and #$F0
-        lsr
-        sta SpritePtr3
-        sta WSYNC
-
         lda #0
         sta VBLANK
 
         ; 192 scanlines of picture...
+
+         ; 14 scan lines of nothing
+              ldx #14
+              jsr WaitForLines
+
+        ; 1 scan line to choose sprites
+              lda #>Char0
+              sta SpritePtr0+1
+              sta SpritePtr1+1
+              sta SpritePtr2+1
+              sta SpritePtr3+1
+              lda Score
+              and #$0F
+              asl
+              asl
+              asl
+              sta SpritePtr0
+              lda Score
+              and #$F0
+              lsr
+              sta SpritePtr1
+              lda HiScore
+              and #$0F
+              asl
+              asl
+              asl
+              sta SpritePtr2
+              lda HiScore
+              and #$F0
+              lsr
+              sta SpritePtr3
+              sta WSYNC
 
         ; 8 scan lines to draw sprite
               ldy #7
@@ -210,10 +217,6 @@ DrawSprite    lda (SpritePtr3),y
               jsr SetHorizPos
               sta WSYNC
               sta HMOVE
-
-         ; 15 scan lines of nothing
-              ldx #15
-              jsr WaitForLines
 
               ldx #0
               ldy #0
@@ -475,7 +478,7 @@ SetDirection  stx Direction
 
 Motion        dec MotionCount
               bne WaitOver
-Timeout       lda #MotionDelay
+Timeout       lda #MOTION_DELAY
               sta MotionCount
               lda Direction
               beq WaitOver
@@ -590,7 +593,7 @@ Move SUBROUTINE move
             sta Body,x              ; store at new free location
             lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
-            lda #MunchDelay         ; increase motion delay to make visible
+            lda #MUNCH_DELAY         ; increase motion delay to make visible
             sta MotionCount
             lda #ChimeIndex         ; trigger sound effect
             sta Sound

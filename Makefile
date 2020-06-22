@@ -1,7 +1,8 @@
 ROM ?= snakes
+INCLUDE_PATH ?= $(HOME)/tools/machines/atari2600/
 
 %.bin: %.asm
-	/Users/rzzxf5/tools/dasm $< -I/Users/rzzxf5/tools/machines/atari2600/ -f3 -v5 -o$@ -l$*.txt
+	dasm $< -I$(INCLUDE_PATH) -f3 -v5 -o$@ -l$*.txt
 
 run: $(ROM).bin
-	/Users/rzzxf5/tools/stella.sh $<
+	stella $<

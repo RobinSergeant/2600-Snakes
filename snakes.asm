@@ -1,3 +1,5 @@
+; Copyright 2020 by Robin Sergeant. See license.txt distributed with this file.
+
             processor 6502
 
             include "vcs.h"

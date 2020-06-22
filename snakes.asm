@@ -21,6 +21,8 @@ HiScore     ds 1
 
 Sound       ds 1
 
+RandomNum   ds 1
+
 DisplayLeft  ds 17
 DisplayRight ds 17
 
@@ -95,6 +97,8 @@ Restart     lda #$12
             sta Body+1
             lda #$32
             sta Body+2
+            lda #0
+            sta Body+3
 
             lda #2
             sta HeadLoc
@@ -276,7 +280,7 @@ Line2         sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               lda DisplayRight,x  ; 4
               lsr                 ; 2
@@ -301,7 +305,7 @@ Line3         sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               ldy PF1b_Temp       ; 3
               lda PFData,y        ; 4
@@ -328,7 +332,7 @@ Line4         ;sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               cpx Mask_Temp       ; 3
               bne SetMask
@@ -352,12 +356,15 @@ Line5         sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               ldy FreeLoc         ; 3
               lda Body,y          ; 4
-              and #$0F            ; 2
-              sta Fruit_Current      ; 3
+              bne ValidLoc
+              lda #$FF
+              bne Line5End
+ValidLoc      and #$0F            ; 2
+Line5End      sta Fruit_Current   ; 3
               ldy #5
 
 Line6         sta WSYNC
@@ -376,18 +383,17 @@ Line6         sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               cpx Fruit_Current       ; 3
               bne SetFruit
               lda #%01100000
 SetFruit      sta Fruit_Current
-              lda 0
+              lda #0
               sta GRP1
-              ldy #6
 
 Line7         sta WSYNC
-              lda #0
+              ldy #6
               sta PF0
               lda #1
               sta PF1
@@ -402,7 +408,7 @@ Line7         sta WSYNC
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               inx
               ldy #0
@@ -418,12 +424,12 @@ Line8         sta WSYNC
               sta PF2a_Current    ; 3
               lda Mask_Temp       ; 3
               sta Mask_Current    ; 3
-              SLEEP 2
+              SLEEP 3
               lda PF0b_Current
               sta PF0
               lda PF1b_Current
               sta PF1
-              lda 0
+              lda #0
               sta PF2
               lda PF0b_Temp       ; 3
               sta PF0b_Current    ; 3
@@ -472,14 +478,13 @@ CheckStick    jsr CheckJoystick
               lda Direction
               bne SetDirection  ; not the first joystick push
               lda MotionCount   ; use MotionCount as seed
-              jsr GetRandom     ; get random location of fruit
-              ldy FreeLoc
-              sta Body,y
+              sta RandomNum
 
 SetDirection  stx Direction
+              jsr GetRandom
 
 Motion        dec MotionCount
-              bne WaitOver
+              bne CheckFruit
 Timeout       lda #MOTION_DELAY
               sta MotionCount
               lda Direction
@@ -492,9 +497,20 @@ Timeout       lda #MOTION_DELAY
 
 CheckLen      lda Score
               cmp #$70
-              bne WaitOver
+              bne CheckFruit
               lda #0
               sta Direction     ; Win!
+
+CheckFruit    ldx FreeLoc       ; if FreeLoc contains zero then we need
+              lda Body,x        ; to place the next fruit
+              bne WaitOver
+              lda RandomNum     ; check RandomNum corresponds to a free square
+              jsr UnpackA
+              jsr CheckPlayField
+              bvs UpdateRandom
+              ldx FreeLoc       ; if so place fruit here
+              sta Body,x
+UpdateRandom  jsr GetRandom
 
 WaitOver      TIMER_WAIT
               jmp StartOfFrame
@@ -565,10 +581,12 @@ Move SUBROUTINE move
 .continue   jsr PackXY
             jsr CheckPlayField      ; check that new location is empty
             bvs .collision
+            cmp #0
+            beq .move               ; special case, do not check for fruit here
             ldx FreeLoc
             cmp Body,x              ; check if new location contains fruit
             beq .grow               ; if so grow rather than move
-            pha
+.move       pha
             lda TailLoc
             jsr UnpackA
             jsr UpdatePlayField     ; clear PF at tail
@@ -589,10 +607,9 @@ Move SUBROUTINE move
             sta Score
             inc HeadLoc             ; increment head and free locations
             inc FreeLoc
-            lda Body,x              ; Generate next random number in sequence
-            jsr GetRandom
+            lda #0
             inx
-            sta Body,x              ; store at new free location
+            sta Body,x              ; clear free location coordinates
             lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
             lda #MUNCH_DELAY         ; increase motion delay to make visible
@@ -616,6 +633,7 @@ GameOver SUBROUTINE
             lda #0
             sta Score
             sta Direction
+            sta RandomNum
 .ResetPF    dex
             sta DisplayLeft,x
             sta DisplayRight,x
@@ -697,10 +715,12 @@ UnpackA SUBROUTINE
 
 ; Get next random number
 GetRandom SUBROUTINE
+            lda RandomNum
             lsr
             bcc .NoEor
             eor #$D4
-.NoEor      rts
+.NoEor      sta RandomNum
+            rts
 
 ; SetHorizPos routine
 ; A = X coordinate

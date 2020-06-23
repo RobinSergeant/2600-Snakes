@@ -57,8 +57,11 @@ STACK_POS = Mask_Temp
 
 Body        ds #$FF - STACK_POS
 
+; calculate the maximum score rounded down to a multiple of 5
+; and convert to BCD
 MAX_SCORE SET $FF - Body - 3
 MAX_SCORE SET MAX_SCORE - MAX_SCORE % 5
+MAX_SCORE SET MAX_SCORE / 10 << 4 + MAX_SCORE % 10
 
             SEG
 
@@ -496,7 +499,7 @@ Timeout       lda #MOTION_DELAY
               jmp GameOver
 
 CheckLen      lda Score
-              cmp #$70
+              cmp #MAX_SCORE
               bne CheckFruit
               lda #0
               sta Direction     ; Win!

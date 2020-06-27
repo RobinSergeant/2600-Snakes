@@ -730,11 +730,6 @@ GetRandom SUBROUTINE
 ; A = X coordinate
 ; X = player number (0 or 1)
 SetHorizPos SUBROUTINE
-  cmp #3
-  bcc FindPos
-  sec
-  sbc #3
-FindPos
   sta WSYNC  ; start a new line
   sec    ; set carry flag
 DivideLoop
@@ -745,8 +740,9 @@ DivideLoop
   asl
   asl
   asl
-  sta HMP0,x  ; set fine offset
+  SLEEP 3   ; waste 3 cycles for correct timing
   sta RESP0,x  ; fix coarse position
+  sta HMP0,x  ; set fine offset
   rts    ; return to caller
 
             ALIGN  256

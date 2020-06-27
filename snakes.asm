@@ -516,6 +516,7 @@ CheckFruit    ldx FreeLoc       ; if FreeLoc contains zero then we need
 UpdateRandom  jsr GetRandom
 
 WaitOver      TIMER_WAIT
+              sta WSYNC
               jmp StartOfFrame
 
 ; wait for X scanlines

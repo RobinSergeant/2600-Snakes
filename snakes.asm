@@ -732,8 +732,8 @@ GetRandom SUBROUTINE
 SetHorizPos SUBROUTINE
             cpx #2 ; carry flag will be set for balls and missiles
             adc #0 ; (adding 1 to account for different timings)
-            sta WSYNC
             sec
+            sta WSYNC
 .loop       sbc #15
             bcs .loop
             eor #7
@@ -741,9 +741,8 @@ SetHorizPos SUBROUTINE
             asl
             asl
             asl
-            SLEEP 3       ; waste 3 cycles for correct timing
+            sta.a HMP0,X  ; force absolute addressing for timing!
             sta RESP0,X
-            sta HMP0,X
             rts
 
             ALIGN  256

@@ -728,22 +728,23 @@ GetRandom SUBROUTINE
 
 ; SetHorizPos routine
 ; A = X coordinate
-; X = player number (0 or 1)
+; RESP0+X = reset register to strobe
 SetHorizPos SUBROUTINE
-  sta WSYNC  ; start a new line
-  sec    ; set carry flag
-DivideLoop
-  sbc #15    ; subtract 15
-  bcs DivideLoop  ; branch until negative
-  eor #7    ; calculate fine offset
-  asl
-  asl
-  asl
-  asl
-  SLEEP 3   ; waste 3 cycles for correct timing
-  sta RESP0,x  ; fix coarse position
-  sta HMP0,x  ; set fine offset
-  rts    ; return to caller
+            cpx #2 ; carry flag will be set for balls and missiles
+            adc #0 ; (adding 1 to account for different timings)
+            sta WSYNC
+            sec
+.loop       sbc #15
+            bcs .loop
+            eor #7
+            asl
+            asl
+            asl
+            asl
+            SLEEP 3       ; waste 3 cycles for correct timing
+            sta RESP0,X
+            sta HMP0,X
+            rts
 
             ALIGN  256
 

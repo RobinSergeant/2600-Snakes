@@ -75,6 +75,7 @@ Reset      CLEAN_START
 
         lda #$98
         sta COLUPF
+        sta RandomNum ; use this color as random number seed!
 
         lda #1
         sta VDELP1
@@ -475,16 +476,7 @@ Done          sta WSYNC
               inc Sound
 
 CheckStick    jsr CheckJoystick
-              cpx Direction
-              beq Motion
-
-              lda Direction
-              bne SetDirection  ; not the first joystick push
-              lda MotionCount   ; use MotionCount as seed
-              sta RandomNum
-
-SetDirection  stx Direction
-              jsr GetRandom
+              stx Direction
 
 Motion        dec MotionCount
               bne CheckFruit
@@ -510,12 +502,12 @@ CheckFruit    ldx FreeLoc       ; if FreeLoc contains zero then we need
               lda RandomNum     ; check RandomNum corresponds to a free square
               jsr UnpackA
               jsr CheckPlayField
-              bvs UpdateRandom
+              bvs WaitOver
               ldx FreeLoc       ; if so place fruit here
               sta Body,x
-UpdateRandom  jsr GetRandom
 
-WaitOver      TIMER_WAIT
+WaitOver      jsr GetRandom     ; cycle through random number every frame
+              TIMER_WAIT
               sta WSYNC
               jmp StartOfFrame
 
@@ -637,7 +629,6 @@ GameOver SUBROUTINE
             lda #0
             sta Score
             sta Direction
-            sta RandomNum
 .ResetPF    dex
             sta DisplayLeft,x
             sta DisplayRight,x

@@ -16,6 +16,11 @@ MOTION_DELAY = 10
 MUNCH_DELAY = 20
 DISPLAY_POS = [160 - 43] / 2
 
+DIR_LEFT  = %10000000
+DIR_RIGHT = %11000000
+DIR_UP    = %00100000
+DIR_DOWN  = %00110000
+
 Score       ds 1
 HiScore     ds 1
 
@@ -26,7 +31,8 @@ RandomNum   ds 1
 DisplayLeft  ds 17
 DisplayRight ds 17
 
-Direction   ds 1
+Direction     ds 1
+NewDirection  ds 1
 
 MotionCount ds 1
 
@@ -117,6 +123,9 @@ Restart     lda #$12
 
             lda #MOTION_DELAY
             sta MotionCount
+
+            lda #DIR_RIGHT
+            sta Direction
 
 StartOfFrame
 
@@ -476,14 +485,15 @@ Done          sta WSYNC
               inc Sound
 
 CheckStick    jsr CheckJoystick
-              stx Direction
+              stx NewDirection
 
 Motion        dec MotionCount
               bne CheckFruit
 Timeout       lda #MOTION_DELAY
               sta MotionCount
-              lda Direction
+              lda NewDirection
               beq WaitOver
+              jsr UpdateDirection
               lda #<Face
               sta FaceSpritePtr
               jsr Move
@@ -494,7 +504,7 @@ CheckLen      lda Score
               cmp #MAX_SCORE
               bne CheckFruit
               lda #0
-              sta Direction     ; Win!
+              sta NewDirection     ; Win!
 
 CheckFruit    ldx FreeLoc       ; if FreeLoc contains zero then we need
               lda Body,x        ; to place the next fruit
@@ -519,32 +529,31 @@ WaitForLines SUBROUTINE
               rts
 
 CheckJoystick SUBROUTINE
-            ldx Direction
+            ldx NewDirection
             bit SWCHA
-            bvs CheckRight
-            cpx #2
-            beq .return
-            ldx #1
+            bvs .CheckRight
+            ldx #DIR_LEFT
             rts
-CheckRight  bit SWCHA
-            bmi CheckUP
-            cpx #1
-            beq .return
-            ldx #2
+.CheckRight bit SWCHA
+            bmi .CheckUP
+            ldx #DIR_RIGHT
             rts
-CheckUP     lda #$10
+.CheckUP    lda #$10
             bit SWCHA
-            bne CheckDOWN
-            cpx #4
-            beq .return
-            ldx #3
+            bne .CheckDOWN
+            ldx #DIR_UP
             rts
-CheckDOWN   lda #$20
+.CheckDOWN  lda #$20
             bit SWCHA
             bne .return
-            cpx #3
-            beq .return
-            ldx #4
+            ldx #DIR_DOWN
+.return     rts
+
+UpdateDirection SUBROUTINE
+            lda NewDirection
+            bit Direction
+            bne .return           ; overlap indicates invalid direction change
+            sta Direction
 .return     rts
 
 ; Move snake
@@ -555,18 +564,18 @@ Move SUBROUTINE move
             jsr UpdatePlayField     ; Put body segment at old head location
             jsr UnpackA
             lda Direction           ; Use direction to calculate new head loc
-.left       cmp #1
+.left       cmp #DIR_LEFT
             bne .right
             dex
             bpl .continue
             bmi .collision
-.right      cmp #2
+.right      cmp #DIR_RIGHT
             bne .up
             inx
             cpx #16
             bne .continue
             beq .collision
-.up         cmp #3
+.up         cmp #DIR_UP
             bne .down
             dey
             bpl .continue
@@ -628,7 +637,7 @@ GameOver SUBROUTINE
 .NoHiScore  ldx #16
             lda #0
             sta Score
-            sta Direction
+            sta NewDirection
 .ResetPF    dex
             sta DisplayLeft,x
             sta DisplayRight,x

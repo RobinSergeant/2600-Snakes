@@ -16,10 +16,15 @@ MOTION_DELAY = 10
 MUNCH_DELAY = 20
 DISPLAY_POS = [160 - 43] / 2
 
-DIR_LEFT  = %10000000
-DIR_RIGHT = %11000000
-DIR_UP    = %00100000
-DIR_DOWN  = %00110000
+DIR_LEFT    = %10000000
+DIR_RIGHT   = %11000000
+DIR_UP      = %00100000
+DIR_DOWN    = %00110000
+
+MOV_LEFT    = %00000000
+MOV_RIGHT   = %01000000
+MOV_UP      = %10000000
+MOV_DOWN    = %11000000
 
 Score       ds 1
 HiScore     ds 1
@@ -36,8 +41,13 @@ NewDirection  ds 1
 
 MotionCount ds 1
 
-HeadLoc     ds 1
-FreeLoc     ds 1
+HeadPosition    ds 1
+TailPosition    ds 1
+FruitPosition   ds 1
+
+FreeIndex       ds 1
+FreeOffset      ds 1
+TailOffset      ds 1
 TailLoc = Body
 
 FaceSpritePtr   ds 2
@@ -101,19 +111,16 @@ Reset      CLEAN_START
         lda #<Face
         sta FaceSpritePtr
 
-Restart     lda #$12
-            sta Body
-            lda #$22
-            sta Body+1
-            lda #$32
-            sta Body+2
-            lda #0
-            sta Body+3
+Restart     lda #0
+            sta TailLoc
+            sta FreeIndex
+            sta TailOffset
+            sta FreeOffset
 
-            lda #2
-            sta HeadLoc
-            lda #3
-            sta FreeLoc
+            lda #$12
+            sta TailPosition
+            lda #$32
+            sta HeadPosition
 
             ldx #1
             ldy #2
@@ -126,6 +133,9 @@ Restart     lda #$12
 
             lda #DIR_RIGHT
             sta Direction
+
+            jsr GrowBody
+            jsr GrowBody
 
 StartOfFrame
 
@@ -215,8 +225,7 @@ DrawSprite    lda (SpritePtr3),y
 
               ; 5 scan lines to position game sprites
               sta WSYNC
-              ldx FreeLoc
-              lda Body,x
+              lda FruitPosition
               and #$F0
               lsr
               lsr
@@ -225,8 +234,7 @@ DrawSprite    lda (SpritePtr3),y
               ldx #1
               jsr SetHorizPos
               sta WSYNC
-              ldx HeadLoc
-              lda Body,x
+              lda HeadPosition
               and #$F0
               lsr
               lsr
@@ -323,13 +331,12 @@ Line3         sta WSYNC
               ldy PF1b_Temp       ; 3
               lda PFData,y        ; 4
               sta PF1b_Temp       ; 3
-              ldy HeadLoc         ; 3
-              lda Body,y          ; 4
+              lda HeadPosition
               and #$0F            ; 2
               sta Mask_Temp       ; 3 = 22
               ldy #3
 
-Line4         ;sta WSYNC
+Line4         sta WSYNC
               lda #0
               sta PF0
               lda #1
@@ -371,8 +378,7 @@ Line5         sta WSYNC
               sta PF1
               lda #0
               sta PF2
-              ldy FreeLoc         ; 3
-              lda Body,y          ; 4
+              lda FruitPosition
               bne ValidLoc
               lda #$FF
               bne Line5End
@@ -497,28 +503,20 @@ Timeout       lda #MOTION_DELAY
               lda #<Face
               sta FaceSpritePtr
               jsr Move
-              bvc CheckLen
+              bvc CheckFruit
               jmp GameOver
 
-CheckLen      lda Score
-              cmp #MAX_SCORE
-              bne CheckFruit
-              lda #0
-              sta NewDirection     ; Win!
-
-CheckFruit    ldx FreeLoc       ; if FreeLoc contains zero then we need
-              lda Body,x        ; to place the next fruit
+CheckFruit    lda FruitPosition ; if zero then we needto place the next fruit
               bne WaitOver
               lda RandomNum     ; check RandomNum corresponds to a free square
               jsr UnpackA
               jsr CheckPlayField
               bvs WaitOver
-              ldx FreeLoc       ; if so place fruit here
-              sta Body,x
+              sta FruitPosition ; if so place fruit here
 
 WaitOver      jsr GetRandom     ; cycle through random number every frame
-              TIMER_WAIT
               sta WSYNC
+              TIMER_WAIT
               jmp StartOfFrame
 
 ; wait for X scanlines
@@ -558,8 +556,7 @@ UpdateDirection SUBROUTINE
 
 ; Move snake
 Move SUBROUTINE move
-            ldx HeadLoc             ; Find location of head
-            lda Body,x
+            lda HeadPosition
             jsr UnpackA
             jsr UpdatePlayField     ; Put body segment at old head location
             jsr UnpackA
@@ -586,38 +583,27 @@ Move SUBROUTINE move
 .continue   jsr PackXY
             jsr CheckPlayField      ; check that new location is empty
             bvs .collision
+            sta HeadPosition
             cmp #0
             beq .move               ; special case, do not check for fruit here
-            ldx FreeLoc
-            cmp Body,x              ; check if new location contains fruit
+            cmp FruitPosition       ; check if new location contains fruit
             beq .grow               ; if so grow rather than move
-.move       pha
-            lda TailLoc
-            jsr UnpackA
-            jsr UpdatePlayField     ; clear PF at tail
-            ldx HeadLoc
-            pla
-.reorder    ldy Body,x              ; shift snake backwards overwriting tail
-            sta Body,x
-            tya
-            dex
-            bpl .reorder
+.move       jsr TrimTail
+            jsr GrowBody
             clv
             rts
-.grow       sed                     ; increase score using BCD addition
+.grow       jsr GrowBody
+            lda #0
+            sta FruitPosition
+            sed                     ; increase score using BCD addition
             clc
             lda Score
             adc #1
             cld
             sta Score
-            inc HeadLoc             ; increment head and free locations
-            inc FreeLoc
-            lda #0
-            inx
-            sta Body,x              ; clear free location coordinates
             lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
-            lda #MUNCH_DELAY         ; increase motion delay to make visible
+            lda #MUNCH_DELAY        ; increase motion delay to make visible
             sta MotionCount
             lda #ChimeIndex         ; trigger sound effect
             sta Sound
@@ -625,6 +611,86 @@ Move SUBROUTINE move
             rts
 .collision  bit .return             ; set overflow flag
 .return     rts
+
+GrowBody SUBROUTINE
+            lda Direction           ; convert direction to movement value
+            bpl .vertical
+            and #%01000000
+            bpl .store
+.vertical   asl
+            asl
+
+.store      ldx FreeOffset          ; store new movement value
+            beq .done
+.shift      lsr
+            lsr
+            dex
+            bne .shift
+.done       ldx FreeIndex
+            ora Body,x
+            sta Body,x
+
+            inc FreeOffset
+            lda FreeOffset
+            cmp #4
+            bne .return
+            lda #0
+            sta FreeOffset
+            inc FreeIndex
+            ldx FreeIndex
+            sta Body,x
+.return     rts
+
+TrimTail SUBROUTINE
+            lda TailLoc           ; find movement value at tail
+            ldx TailOffset
+            beq .done
+.shift      asl
+            asl
+            dex
+            bne .shift
+.done       and #%11000000
+            pha
+
+            lda TailPosition      ; clear tail position
+            jsr UnpackA
+            jsr UpdatePlayField
+
+            jsr UnpackA           ; update tail position
+            pla
+            bne .right
+            dex
+.right      cmp #MOV_RIGHT
+            bne .up
+            inx
+.up         cmp #MOV_UP
+            bne .down
+            dey
+.down       cmp #MOV_DOWN
+            bne .update
+            iny
+.update     jsr PackXY
+            sta TailPosition
+
+            inc TailOffset
+            lda TailOffset
+            cmp #4
+            bne .return
+            lda #0
+            sta TailOffset
+
+            ldx FreeIndex
+            dec FreeIndex
+            lda Body,x
+            dex
+.reorder    ldy Body,x              ; shift backwards overwriting tail byte
+            sta Body,x
+            tya
+            dex
+            bpl .reorder
+
+.return     rts
+
 
 
 GameOver SUBROUTINE

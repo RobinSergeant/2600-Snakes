@@ -16,6 +16,9 @@ MOTION_DELAY = 10
 MUNCH_DELAY = 20
 DISPLAY_POS = [160 - 43] / 2
 
+PLAY_AREA_WIDTH = 24
+PLAY_AREA_HEIGHT = 16
+
 DIR_LEFT    = %10000000
 DIR_RIGHT   = %11000000
 DIR_UP      = %00100000
@@ -33,17 +36,21 @@ Sound       ds 1
 
 RandomNum   ds 1
 
-DisplayLeft  ds 17
-DisplayRight ds 17
+PF0R_PF1L     ds PLAY_AREA_HEIGHT
+PF2L          ds PLAY_AREA_HEIGHT
+PF1R          ds PLAY_AREA_HEIGHT
 
 Direction     ds 1
 NewDirection  ds 1
 
 MotionCount ds 1
 
-HeadPosition    ds 1
-TailPosition    ds 1
-FruitPosition   ds 1
+HeadPosition_X  ds 1
+HeadPosition_Y  ds 1
+TailPosition_X  ds 1
+TailPosition_Y  ds 1
+FruitPosition_X ds 1
+FruitPosition_Y ds 1
 
 FreeIndex       ds 1
 FreeOffset      ds 1
@@ -52,32 +59,30 @@ TailLoc = Body
 
 FaceSpritePtr   ds 2
 
-PF2a_Current  ds 1
-PF0b_Current  ds 1
-PF1b_Current  ds 1
-Mask_Current  ds 1
-Fruit_Current ds 1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Temp data / stack space here
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-PF2a_Temp    ds 1
-PF0b_Temp    ds 1
-PF1b_Temp    ds 1
-Mask_Temp    ds 1
+SpritePtr0  ds 2
+SpritePtr1  ds 2
+SpritePtr2  ds 2
+SpritePtr3  ds 2
 
-SpritePtr0 = PF2a_Current
-SpritePtr1 = PF1b_Current
-SpritePtr2 = PF2a_Temp
-SpritePtr3 = PF1b_Temp
+Mask_Current  = SpritePtr0
+Fruit_Current = SpritePtr1
+Mask_Temp     = SpritePtr2
 
-Temp = PF2a_Current
-STACK_POS = Mask_Temp
+Temp = SpritePtr0
+STACK_POS = SpritePtr3+1
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; end of stack space
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 Body        ds #$FF - STACK_POS
 
-; calculate the maximum score rounded down to a multiple of 5
-; and convert to BCD
-MAX_SCORE SET $FF - Body - 3
-MAX_SCORE SET MAX_SCORE - MAX_SCORE % 5
-MAX_SCORE SET MAX_SCORE / 10 << 4 + MAX_SCORE % 10
+; calculate the maximum bodu length
+MAX_BODY_LENGTH SET [$FF - Body + 1] * 4
 
             SEG
 
@@ -99,17 +104,13 @@ Reset      CLEAN_START
         lda #5
         sta AUDV0
 
-        ;lda #4
-        ;sta CTRLPF
-
-        lda #$FF
-        sta DisplayLeft+16
-        sta DisplayRight+16
-
         lda #>Char0
         sta FaceSpritePtr+1
         lda #<Face
         sta FaceSpritePtr
+
+        lda #PLAY_AREA_HEIGHT
+        sta FruitPosition_Y
 
 Restart     lda #0
             sta TailLoc
@@ -117,16 +118,16 @@ Restart     lda #0
             sta TailOffset
             sta FreeOffset
 
-            lda #$12
-            sta TailPosition
-            lda #$32
-            sta HeadPosition
-
             ldx #1
             ldy #2
+            sty HeadPosition_Y
+            sty TailPosition_Y
+            stx TailPosition_X
             jsr UpdatePlayField
             inx
             jsr UpdatePlayField
+            inx
+            stx HeadPosition_X
 
             lda #MOTION_DELAY
             sta MotionCount
@@ -225,243 +226,245 @@ DrawSprite    lda (SpritePtr3),y
 
               ; 5 scan lines to position game sprites
               sta WSYNC
-              lda FruitPosition
-              and #$F0
-              lsr
-              lsr
+              lda FruitPosition_X
+              asl
+              asl
               clc
-              adc #48
+              adc #32
               ldx #1
               jsr SetHorizPos
               sta WSYNC
-              lda HeadPosition
-              and #$F0
-              lsr
-              lsr
+              lda HeadPosition_X
+              asl
+              asl
               clc
-              adc #48
+              adc #32
               ldx #0
               jsr SetHorizPos
               sta WSYNC
               sta HMOVE
 
               ldx #0
-              ldy #0
               stx Mask_Current
               stx Fruit_Current
               stx NUSIZ0
               stx NUSIZ1
-              lda #$FF
-              sta PF2a_Current
-              sta PF0b_Current
-              lda #$F8
-              sta PF1b_Current
               lda #$0E
               sta COLUP1
-Line1         sta WSYNC
-              lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors          ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              lda DisplayLeft,x   ; 4
-              sta PF2a_Temp       ; 3
-              lda DisplayRight,x  ; 4
-              asl                 ; 2
-              asl                 ; 2
-              asl                 ; 2
-              asl                 ; 2
-              sta PF0b_Temp       ; 3 = 22
 
-Line2         sta WSYNC
               lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+1        ; 4
-              sta COLUP0          ; 3
-              lda Fruit_Current   ; 3
-              sta GRP1            ; 3 = 14
-              ldy #2
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              lda DisplayRight,x  ; 4
-              lsr                 ; 2
-              lsr                 ; 2
-              lsr                 ; 2
-              lsr                 ; 2
-              sta PF1b_Temp
-
-Line3         sta WSYNC
-              lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+2        ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              ldy PF1b_Temp       ; 3
-              lda PFData,y        ; 4
-              sta PF1b_Temp       ; 3
-              lda HeadPosition
-              and #$0F            ; 2
-              sta Mask_Temp       ; 3 = 22
-              ldy #3
-
-Line4         sta WSYNC
-              lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+3        ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              cpx Mask_Temp       ; 3
+              cmp HeadPosition_Y
               bne SetMask
-              lda #$FF
-SetMask       sta Mask_Temp
-              ldy #4
+              lda #$FF              ; snakes head is on first row
+SetMask       sta Mask_Current
 
-Line5         sta WSYNC
               lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+4        ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              lda FruitPosition
-              bne ValidLoc
-              lda #$FF
-              bne Line5End
-ValidLoc      and #$0F            ; 2
-Line5End      sta Fruit_Current   ; 3
-              ldy #5
-
-Line6         sta WSYNC
-              lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+5        ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              cpx Fruit_Current       ; 3
+              cmp FruitPosition_Y
               bne SetFruit
-              lda #%01100000
+              lda #%01100000        ; fruit is on first row
 SetFruit      sta Fruit_Current
-              lda #0
+
+
+              ldy #7
+TopWall       sta WSYNC
+              lda #$1F              ; 2
+              sta PF1               ; 3
+              lda #$FF              ; 2
+              sta PF2               ; 3
+              lda #$F0              ; 2
+              SLEEP 12
+              sta PF0               ; 3 = 27
+              lda #$FF              ; 2
+              SLEEP 5
+              sta PF1               ; 3 = 37
+              lda #$01              ; 2
+              SLEEP 6
+              sta PF2               ; 3 = 48
+              lda #0                ; 2
+              sta PF0               ; 3 = 53
+              dey
+              bpl TopWall
+
+RenderRow     ldy #7
+              sec
+              sta WSYNC
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2 = 8
+              sta PF1               ; 3
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda (FaceSpritePtr),y ; 5
+              and Mask_Current      ; 3
+              sta GRP0              ; 3 = 29
+              lda PF2L,x            ; 4 = 33
+              sta PF2               ; 3
+              lda PF0R_PF1L,x       ; 4 = 40
+              sta PF0               ; 3
+              lda PF1R,x            ; 4 = 47
+              sta PF1               ; 3
+              lda #$01              ; 2 = 52
+              sta PF2               ; 3
+              lda #0                ; 2 = 57
+              sta PF0               ; 3
+              dey                   ; 2
+              txa                   ; 2
+              sbc HeadPosition_Y    ; 3
+              cmp #$FF              ; 2
+              beq SetTempMask       ; 2
+              lda #0                ; 2
+SetTempMask   sta Mask_Temp         ; 3 = 76
+
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2 = 8
+              sta PF1               ; 3
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda (FaceSpritePtr),y ; 5
+              and Mask_Current      ; 3
+              sta GRP0              ; 3 = 29
+              lda PF2L,x            ; 4 = 33
+              sta PF2               ; 3
+              lda PF0R_PF1L,x       ; 4 = 40
+              sta PF0               ; 3
+              lda PF1R,x            ; 4 = 47
+              sta PF1               ; 3
+              lda #$01              ; 2 = 52
+              sta PF2               ; 3
+              lda #0                ; 2 = 57
+              sta PF0               ; 3
+              dey                   ; 2
+              lda Fruit_Current
               sta GRP1
+              sec
+              sta WSYNC
 
-Line7         sta WSYNC
-              ldy #6
-              sta PF0
-              lda #1
-              sta PF1
-              lda colors+6        ; 4
-              sta COLUP0          ; 3
-              lda (FaceSpritePtr),y
-              and Mask_Current    ; 3
-              sta GRP0            ; 3 = 17
-              lda PF2a_Current
-              sta PF2
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2 = 8
+              sta PF1               ; 3
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda (FaceSpritePtr),y ; 5
+              and Mask_Current      ; 3
+              sta GRP0              ; 3 = 29
+              lda PF2L,x            ; 4 = 33
+              sta PF2               ; 3
+              lda PF0R_PF1L,x       ; 4 = 40
+              sta PF0               ; 3
+              lda PF1R,x            ; 4 = 47
+              sta PF1               ; 3
+              lda #$01              ; 2 = 52
+              sta PF2               ; 3
+              lda #0                ; 2 = 57
+              sta PF0               ; 3
+              dey                   ; 2
+              txa
+              sbc FruitPosition_Y
+              sta Fruit_Current
+              ;sta WSYNC
+
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2 = 8
+              sta PF1               ; 3
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda (FaceSpritePtr),y ; 5
+              and Mask_Current      ; 3
+              sta GRP0              ; 3 = 29
+              lda PF2L,x            ; 4 = 33
+              sta PF2               ; 3
+              lda PF0R_PF1L,x       ; 4 = 40
+              sta PF0               ; 3
+              lda PF1R,x            ; 4 = 47
+              sta PF1               ; 3
+              lda #$01              ; 2 = 52
+              sta PF2               ; 3
+              lda #0                ; 2 = 57
+              sta PF0               ; 3
+              dey                   ; 2
+              lda Fruit_Current
+              cmp #$FF
+              beq UpdateFruit
               lda #0
-              sta PF2
+UpdateFruit   and #%01100000
+              sta Fruit_Current
+
+RenderLine    sta WSYNC
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2 = 8
+              sta PF1               ; 3
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda (FaceSpritePtr),y ; 5
+              and Mask_Current      ; 3
+              sta GRP0              ; 3 = 29
+              lda PF2L,x            ; 4 = 33
+              sta PF2               ; 3
+              lda PF0R_PF1L,x       ; 4 = 40
+              sta PF0               ; 3
+              lda PF1R,x            ; 4 = 47
+              sta PF1               ; 3
+              lda #$01              ; 2 = 52
+              sta PF2               ; 3
+              lda #0                ; 2 = 57
+              sta PF0               ; 3
+              cpy #2
+              bne KeepFruit
+              sta GRP1
+KeepFruit     dey
+              bne RenderLine
+
+              sta WSYNC
+              lda PF0R_PF1L,x       ; 4
+              and #$0F              ; 2
+              ora #$10              ; 2
+              sta PF1               ; 3 = 11
+              lda colors,y          ; 4
+              sta COLUP0            ; 3
+              lda Mask_Temp         ; 3
+              sta Mask_Current      ; 3
+              lda PF2L,x            ; 4
+              sta PF2               ; 3 = 31
+              lda PF0R_PF1L,x       ; 4
+              sta PF0               ; 3 = 38
+              lda PF1R,x            ; 4
               inx
-              ldy #0
+              sta PF1               ; 3
+              lda #$01              ; 2
+              sta PF2               ; 3
+              lda #0                ; 2
+              sta PF0               ; 3
+              cpx #PLAY_AREA_HEIGHT
+              bcs Bottom
+              jmp RenderRow
 
-Line8         sta WSYNC
-              lda #0
-              sta PF0
-              lda #1
-              sta PF1
-              lda PF2a_Current
-              sta PF2
-              lda PF2a_Temp       ; 3
-              sta PF2a_Current    ; 3
-              lda Mask_Temp       ; 3
-              sta Mask_Current    ; 3
-              SLEEP 3
-              lda PF0b_Current
-              sta PF0
-              lda PF1b_Current
-              sta PF1
-              lda #0
-              sta PF2
-              lda PF0b_Temp       ; 3
-              sta PF0b_Current    ; 3
-              lda PF1b_Temp       ; 3
-              sta PF1b_Current    ; 3
+Bottom        ldy #7
+BottomWall    sta WSYNC
+              sta GRP0
+              lda #$1F              ; 2
+              sta PF1               ; 3
+              lda #$FF              ; 2
+              sta PF2               ; 3
+              lda #$F0              ; 2
+              SLEEP 9
+              sta PF0               ; 3 = 27
+              lda #$FF              ; 2
+              SLEEP 5
+              sta PF1               ; 3 = 37
+              lda #$01              ; 2
+              SLEEP 6
+              sta PF2               ; 3 = 48
+              lda #0                ; 2
+              sta PF0               ; 3 = 53
+              dey
+              bpl BottomWall
 
-              cpx #18             ; 2
-              beq Done            ; 2
-              jmp Line1           ; 3 = 25
-
-Done          sta WSYNC
+              sta WSYNC
               ldx #0
-              stx PF0
               stx PF1
               stx PF2
               stx PF0
@@ -506,17 +509,21 @@ Timeout       lda #MOTION_DELAY
               bvc CheckFruit
               jmp GameOver
 
-CheckFruit    lda FruitPosition ; if zero then we needto place the next fruit
+CheckFruit    lda FruitPosition_Y   ; if invalid we need to place the next fruit
+              cmp #PLAY_AREA_HEIGHT
               bne WaitOver
               lda RandomNum     ; check RandomNum corresponds to a free square
               jsr UnpackA
+              txa
               jsr CheckPlayField
               bvs WaitOver
-              sta FruitPosition ; if so place fruit here
+              sta FruitPosition_X ; if so place fruit here
+              sty FruitPosition_Y
 
 WaitOver      jsr GetRandom     ; cycle through random number every frame
               sta WSYNC
               TIMER_WAIT
+              sta WSYNC
               jmp StartOfFrame
 
 ; wait for X scanlines
@@ -556,10 +563,10 @@ UpdateDirection SUBROUTINE
 
 ; Move snake
 Move SUBROUTINE move
-            lda HeadPosition
-            jsr UnpackA
+            ldx HeadPosition_X
+            ldy HeadPosition_Y
             jsr UpdatePlayField     ; Put body segment at old head location
-            jsr UnpackA
+            ldx HeadPosition_X
             lda Direction           ; Use direction to calculate new head loc
 .left       cmp #DIR_LEFT
             bne .right
@@ -569,7 +576,7 @@ Move SUBROUTINE move
 .right      cmp #DIR_RIGHT
             bne .up
             inx
-            cpx #16
+            cpx #PLAY_AREA_WIDTH
             bne .continue
             beq .collision
 .up         cmp #DIR_UP
@@ -578,23 +585,24 @@ Move SUBROUTINE move
             bpl .continue
             bmi .collision
 .down       iny
-            cpy #16
+            cpy #PLAY_AREA_HEIGHT
             beq .collision
-.continue   jsr PackXY
+.continue   txa
             jsr CheckPlayField      ; check that new location is empty
             bvs .collision
-            sta HeadPosition
-            cmp #0
-            beq .move               ; special case, do not check for fruit here
-            cmp FruitPosition       ; check if new location contains fruit
+            sta HeadPosition_X
+            sty HeadPosition_Y
+            cmp FruitPosition_X
+            bne .move
+            cpy FruitPosition_Y
             beq .grow               ; if so grow rather than move
 .move       jsr TrimTail
             jsr GrowBody
             clv
             rts
 .grow       jsr GrowBody
-            lda #0
-            sta FruitPosition
+            lda #PLAY_AREA_HEIGHT
+            sta FruitPosition_Y
             sed                     ; increase score using BCD addition
             clc
             lda Score
@@ -650,14 +658,13 @@ TrimTail SUBROUTINE
             dex
             bne .shift
 .done       and #%11000000
-            pha
 
-            lda TailPosition      ; clear tail position
-            jsr UnpackA
+            ldx TailPosition_X    ; clear tail position
+            ldy TailPosition_Y
             jsr UpdatePlayField
 
-            jsr UnpackA           ; update tail position
-            pla
+            ldx TailPosition_X    ; update tail position
+            cmp #MOV_LEFT
             bne .right
             dex
 .right      cmp #MOV_RIGHT
@@ -669,8 +676,8 @@ TrimTail SUBROUTINE
 .down       cmp #MOV_DOWN
             bne .update
             iny
-.update     jsr PackXY
-            sta TailPosition
+.update     stx TailPosition_X
+            sty TailPosition_Y
 
             inc TailOffset
             lda TailOffset
@@ -700,73 +707,96 @@ GameOver SUBROUTINE
             cmp HiScore
             bcc .NoHiScore
             sta HiScore
-.NoHiScore  ldx #16
+.NoHiScore  ldx #PLAY_AREA_HEIGHT
             lda #0
             sta Score
             sta NewDirection
 .ResetPF    dex
-            sta DisplayLeft,x
-            sta DisplayRight,x
+            sta PF0R_PF1L,x
+            sta PF2L,x
+            sta PF1R,x
             bne .ResetPF
             jmp Restart
-
 
 ; CheckPlayField routine
 CheckPlayField SUBROUTINE
             pha
-            cpx #8
-            bcc .continue
-            ; add 17 to y to access right hand side of screen!
-            tya
-            clc
-            adc #17
-            tay
-            ; reallign x relative to right hand side of screen
-            txa
+            cpx #4
+            bcs .pf2left
+            lda PF0R_PF1L,y
+            and BitMask_PF1L,x
+            bne .pixelset
+            beq .pixelclear
+.pf2left    txa
+            cpx #12
+            bcs .pf0right
             sec
-            sbc #8
+            sbc #4
             tax
-.continue   lda BitMask,x
-            and DisplayLeft,y   ; is bit already set?
-            bne .collision
-            pla
+            lda PF2L,y
+            and BitMask_PF2,x
+            bne .pixelset
+            beq .pixelclear
+.pf0right   cpx #16
+            bcs .pf1right
+            sec
+            sbc #12
+            tax
+            lda PF0R_PF1L,y
+            and BitMask_PF0,x
+            bne .pixelset
+            beq .pixelclear
+.pf1right   sec
+            sbc #16
+            tax
+            lda PF1R,y
+            and BitMask_PF1,x
+            bne .pixelset
+.pixelclear pla
             clv
             rts
-.collision  pla
+.pixelset   pla
             bit .return         ; set overflow flag
 .return     rts
 
 ; UpdatePlayField routine
 UpdatePlayField SUBROUTINE
             pha
-            cpx #8
-            bcc .continue
-            ; add 17 to y to access right hand side of screen!
-            tya
-            clc
-            adc #17
-            tay
-            ; reallign x relative to right hand side of screen
-            txa
-            sec
-            sbc #8
-            tax
-.continue   lda BitMask,x
-            eor DisplayLeft,y
-            sta DisplayLeft,y
+            cpx #4
+            bcs .pf2left
+            lda PF0R_PF1L,y
+            eor BitMask_PF1L,x
+            sta PF0R_PF1L,y
             pla
             rts
-
-; Pack X and Y into A
-PackXY SUBROUTINE
-            txa
-            asl
-            asl
-            asl
-            asl
-            sta Temp
-            tya
-            ora Temp
+.pf2left    txa
+            cpx #12
+            bcs .pf0right
+            sec
+            sbc #4
+            tax
+            lda PF2L,y
+            eor BitMask_PF2,x
+            sta PF2L,y
+            pla
+            rts
+.pf0right   cpx #16
+            bcs .pf1right
+            sec
+            sbc #12
+            tax
+            lda PF0R_PF1L,y
+            eor BitMask_PF0,x
+            sta PF0R_PF1L,y
+            pla
+            rts
+.pf1right   sec
+            sbc #16
+            tax
+            lda PF1R,y
+            eor BitMask_PF1,x
+            sta PF1R,y
+            pla
             rts
 
 ; Unpack A into X and Y
@@ -791,6 +821,8 @@ GetRandom SUBROUTINE
             eor #$D4
 .NoEor      sta RandomNum
             rts
+
+            ;ALIGN  256
 
 ; SetHorizPos routine
 ; A = X coordinate
@@ -826,10 +858,10 @@ Char7    .byte $00,$20,$20,$20,$10,$08,$04,$7C
 Char8    .byte $00,$38,$44,$44,$38,$44,$44,$38
 Char9    .byte $00,$70,$08,$04,$3C,$44,$44,$38
 
-Face        .byte %11110000,%11110000,%01100000,%01100000,%11110000,%10010000,%11110000
-FaceClose   .byte %11110000,%11110000,%01100000,%01100000,%11110000,%11110000,%11110000
+Face        .byte %11110000,%11110000,%10010000,%11110000,%01100000,%01100000,%11110000,%11110000
+FaceClose   .byte %11110000,%11110000,%11110000,%11110000,%01100000,%01100000,%11110000,%11110000
 
-colors      .byte $1E,$2E,$3E,$4E,$5E,$6E,$7E,$8E
+colors      .byte $8E,$7E,$6E,$5E,$4E,$3E,$2E,$1E
 
 Effects
 ChimeEffect .byte 6,4,6,3,6,2,6,1,6,0,0
@@ -838,9 +870,10 @@ CrashEffect .byte 8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,8,31,0
 ChimeIndex = ChimeEffect - Effects
 CrashIndex = CrashEffect - Effects
 
-PFData   .byte %00001000,%10001000,%01001000,%11001000,%00101000,%10101000,%01101000,%11101000,%00011000,%10011000,%01011000,%11011000,%00111000,%10111000,%01111000,%11111000
-
-BitMask  .byte %00000001, %00000010, %00000100, %00001000, %00010000, %00100000, %01000000, %10000000
+BitMask_PF2   .byte %00000001, %00000010, %00000100, %00001000
+BitMask_PF0   .byte %00010000, %00100000, %01000000, %10000000
+BitMask_PF1   .byte %10000000, %01000000, %00100000, %00010000
+BitMask_PF1L  .byte %00001000, %00000100, %00000010, %00000001
 
             ORG $FFFA
 

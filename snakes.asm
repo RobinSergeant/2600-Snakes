@@ -14,7 +14,8 @@
 
 MOTION_DELAY = 10
 MUNCH_DELAY = 20
-DISPLAY_POS = [160 - 43] / 2
+SCORE_POS = 108
+HISCORE_POS = 28
 
 PLAY_AREA_WIDTH = 24
 PLAY_AREA_HEIGHT = 16
@@ -29,8 +30,12 @@ MOV_RIGHT   = %01000000
 MOV_UP      = %10000000
 MOV_DOWN    = %11000000
 
-Score       ds 1
-HiScore     ds 1
+SHOW_HI_SCORE = %00000001
+
+GameState   ds 1
+
+Score       ds 2
+HiScore     ds 2
 
 Sound       ds 1
 
@@ -149,15 +154,20 @@ StartOfFrame
         ldx #32
         jsr WaitForLines
 
-        ; 2 scan lines to position sprite
-        lda #DISPLAY_POS
-        ldx #1
+        ; 2 scan lines to position score sprites
+        ldy #SCORE_POS
+        lda GameState
+        and #SHOW_HI_SCORE
+        beq .+4
+        ldy #HISCORE_POS
+        tya
+        ldx #0
         jsr SetHorizPos
         sta WSYNC
-        lda #DISPLAY_POS
+        tya
         clc
-        adc #6
-        ldx #0
+        adc #8
+        ldx #1
         jsr SetHorizPos
 
         ; 1 scaline to move sprite
@@ -173,52 +183,60 @@ StartOfFrame
               ldx #14
               jsr WaitForLines
 
-        ; 1 scan line to choose sprites
+        ; 1 scan line to choose score sprites
               lda #>Char0
               sta SpritePtr0+1
               sta SpritePtr1+1
               sta SpritePtr2+1
-              sta SpritePtr3+1
-              lda Score
+              ldx #Score
+              lda GameState
+              and #SHOW_HI_SCORE
+              beq .+4
+              ldx #HiScore
+              lda $0,x
               and #$0F
               asl
               asl
               asl
               sta SpritePtr0
-              lda Score
+              lda $0,x
               and #$F0
               lsr
               sta SpritePtr1
-              lda HiScore
+              inx
+              lda $0,x
               and #$0F
               asl
               asl
               asl
-              sta SpritePtr2
-              lda HiScore
-              and #$F0
-              lsr
-              sta SpritePtr3
-              sta WSYNC
+              bne SetLastDigit
+              lda #<Blank       ; blank out leading zeros
+              ldx SpritePtr1
+              bne SetLastDigit
+              sta SpritePtr1
+SetLastDigit  sta SpritePtr2
+              ;sta WSYNC
 
         ; 8 scan lines to draw sprite
               ldy #7
               ldx #$C2
-              lda #2
+              lda #1
               sta NUSIZ0
-              sta NUSIZ1
-DrawSprite    lda (SpritePtr3),y
+DrawSprite    sta WSYNC
+              lda (SpritePtr1),y
               sta GRP1
-              sta WSYNC
               lda (SpritePtr2),y
               sta GRP0
               stx COLUP1
               stx COLUP0
-              lda (SpritePtr1),y
-              sta GRP1
               lda (SpritePtr0),y
               inx
               inx
+              nop
+              sta GRP0
+              lda (SpritePtr2),y
+              sta GRP0
+              lda (SpritePtr0),y
               dey
               SLEEP 10
               sta GRP0
@@ -483,6 +501,13 @@ BottomWall    sta WSYNC
               ; 30 scanlines of overscan...
               TIMER_SETUP 30
 
+              jsr CheckScore
+              lda GameState
+              eor #SHOW_HI_SCORE
+              bcc .+4
+              and ~#SHOW_HI_SCORE
+              sta GameState
+
               ldx Sound
               lda Effects,x
               sta AUDC0
@@ -603,12 +628,7 @@ Move SUBROUTINE move
 .grow       jsr GrowBody
             lda #PLAY_AREA_HEIGHT
             sta FruitPosition_Y
-            sed                     ; increase score using BCD addition
-            clc
-            lda Score
-            adc #1
-            cld
-            sta Score
+            jsr UpdateScore
             lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
             lda #MUNCH_DELAY        ; increase motion delay to make visible
@@ -698,18 +718,43 @@ TrimTail SUBROUTINE
 
 .return     rts
 
+UpdateScore SUBROUTINE
+            sed             ; use BCD mode for score arithmetic
+            lda Score
+            clc
+            adc #1          ; add one to low byte of score
+            sta Score
+            lda Score+1     ; add carry to high byte of score
+            adc #0
+            sta Score+1
+            cmp HiScore+1   ; check for new hi-score
+            bcc .return
+            bne .newhiscore
+            lda Score
+            cmp HiScore
+            bcc .return
+.newhiscore lda Score
+            sta HiScore
+            lda Score+1
+            sta HiScore+1
+.return     cld
+            rts
 
+CheckScore SUBROUTINE
+            lda Score+1
+            cmp HiScore+1
+            bcc .return
+            lda Score
+            cmp HiScore
+.return     rts
 
 GameOver SUBROUTINE
             lda CrashIndex
             sta Sound
-            lda Score             ; Game Over!
-            cmp HiScore
-            bcc .NoHiScore
-            sta HiScore
-.NoHiScore  ldx #PLAY_AREA_HEIGHT
+            ldx #PLAY_AREA_HEIGHT
             lda #0
             sta Score
+            sta Score+1
             sta NewDirection
 .ResetPF    dex
             sta PF0R_PF1L,x
@@ -822,7 +867,7 @@ GetRandom SUBROUTINE
 .NoEor      sta RandomNum
             rts
 
-            ;ALIGN  256
+            ALIGN  256
 
 ; SetHorizPos routine
 ; A = X coordinate
@@ -857,6 +902,7 @@ Char6    .byte $00,$38,$44,$44,$78,$40,$20,$1C
 Char7    .byte $00,$20,$20,$20,$10,$08,$04,$7C
 Char8    .byte $00,$38,$44,$44,$38,$44,$44,$38
 Char9    .byte $00,$70,$08,$04,$3C,$44,$44,$38
+Blank    .byte $00,$00,$00,$00,$00,$00,$00,$00
 
 Face        .byte %11110000,%11110000,%10010000,%11110000,%01100000,%01100000,%11110000,%11110000
 FaceClose   .byte %11110000,%11110000,%11110000,%11110000,%01100000,%01100000,%11110000,%11110000

@@ -14,6 +14,7 @@
 
 MOTION_DELAY = 10
 MUNCH_DELAY = 20
+HISCORE_DELAY = 40
 SCORE_POS = 108
 HISCORE_POS = 28
 
@@ -49,6 +50,7 @@ Direction     ds 1
 NewDirection  ds 1
 
 MotionCount ds 1
+EventCount  ds 1
 
 HeadPosition_X  ds 1
 HeadPosition_Y  ds 1
@@ -91,7 +93,7 @@ MAX_BODY_LENGTH SET [$FF - Body + 1] * 4
 
             SEG
 
-            ORG $F000
+            ORG $F800   ; 2K Rom origin
 
 
 Reset      CLEAN_START
@@ -122,6 +124,7 @@ Restart     lda #0
             sta FreeIndex
             sta TailOffset
             sta FreeOffset
+            sta EventCount
 
             ldx #1
             ldy #2
@@ -136,6 +139,9 @@ Restart     lda #0
 
             lda #MOTION_DELAY
             sta MotionCount
+
+            lda #SHOW_HI_SCORE
+            sta GameState
 
             lda #DIR_RIGHT
             sta Direction
@@ -501,14 +507,14 @@ BottomWall    sta WSYNC
               ; 30 scanlines of overscan...
               TIMER_SETUP 30
 
-              jsr CheckScore
+              lda EventCount
+              beq HandleSound
+              dec EventCount
               lda GameState
               eor #SHOW_HI_SCORE
-              bcc .+4
-              and ~#SHOW_HI_SCORE
               sta GameState
 
-              ldx Sound
+HandleSound   ldx Sound
               lda Effects,x
               sta AUDC0
               beq CheckStick
@@ -528,6 +534,8 @@ Timeout       lda #MOTION_DELAY
               lda NewDirection
               beq WaitOver
               jsr UpdateDirection
+              lda #0
+              sta GameState
               lda #<Face
               sta FaceSpritePtr
               jsr Move
@@ -629,7 +637,10 @@ Move SUBROUTINE move
             lda #PLAY_AREA_HEIGHT
             sta FruitPosition_Y
             jsr UpdateScore
-            lda #<FaceClose         ; set face sprite to a closed mouth
+            bcs .setsprite
+            lda #HISCORE_DELAY      ; flash hi-score if below it
+            sta EventCount
+.setsprite  lda #<FaceClose         ; set face sprite to a closed mouth
             sta FaceSpritePtr
             lda #MUNCH_DELAY        ; increase motion delay to make visible
             sta MotionCount
@@ -718,6 +729,7 @@ TrimTail SUBROUTINE
 
 .return     rts
 
+; on return the C flag will be set if Score >= HiScore
 UpdateScore SUBROUTINE
             sed             ; use BCD mode for score arithmetic
             lda Score
@@ -740,13 +752,13 @@ UpdateScore SUBROUTINE
 .return     cld
             rts
 
-CheckScore SUBROUTINE
-            lda Score+1
-            cmp HiScore+1
-            bcc .return
-            lda Score
-            cmp HiScore
-.return     rts
+; CheckScore SUBROUTINE
+;             lda Score+1
+;             cmp HiScore+1
+;             bcc .return
+;             lda Score
+;             cmp HiScore
+; .return     rts
 
 GameOver SUBROUTINE
             lda CrashIndex

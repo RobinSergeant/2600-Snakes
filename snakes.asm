@@ -232,19 +232,22 @@ DrawSprite    sta WSYNC
               lda (SpritePtr1),y
               sta GRP1
               lda (SpritePtr2),y
+              lsr                   ; nudge MSD right 1 pixel
               sta GRP0
               stx COLUP1
               stx COLUP0
               lda (SpritePtr0),y
+              asl                   ; nudge LSD left 1 pixel
               inx
-              inx
-              nop
               sta GRP0
+              inx
               lda (SpritePtr2),y
+              lsr                   ; nudge MSD right 1 pixel
               sta GRP0
               lda (SpritePtr0),y
+              asl                   ; nudge LSD left 1 pixel
               dey
-              SLEEP 10
+              nop
               sta GRP0
               bpl DrawSprite
 

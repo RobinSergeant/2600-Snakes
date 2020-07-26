@@ -548,15 +548,14 @@ Timeout       lda #MOTION_DELAY
 CheckFruit    lda FruitPosition_Y   ; if invalid we need to place the next fruit
               cmp #PLAY_AREA_HEIGHT
               bne WaitOver
-              lda RandomNum     ; check RandomNum corresponds to a free square
-              jsr UnpackA
+              jsr GetRandomPos
               txa
-              jsr CheckPlayField
+              jsr CheckPlayField    ; check pos corresponds to a free square
               bvs WaitOver
-              sta FruitPosition_X ; if so place fruit here
+              sta FruitPosition_X   ; if so place fruit here
               sty FruitPosition_Y
 
-WaitOver      jsr GetRandom     ; cycle through random number every frame
+WaitOver      jsr GetRandom         ; cycle through random number every frame
               sta WSYNC
               TIMER_WAIT
               sta WSYNC
@@ -859,18 +858,22 @@ UpdatePlayField SUBROUTINE
             pla
             rts
 
-; Unpack A into X and Y
-UnpackA SUBROUTINE
-            sta Temp
+; Get random X Y position
+GetRandomPos SUBROUTINE
+            lda RandomNum
             lsr
             lsr
             lsr
             lsr
-            tax
-            lda #$0F
-            and Temp
+            sta Temp      ; store top half of RandomNum in Temp
+            lda RandomNum
+            and #$0F      ; use bottom half for Y (0-15)
             tay
-            lda Temp
+            jsr GetRandom ; get a second random number to extend X
+            and #$0F      ; keep bottom half
+            lsr           ; shift lsb into carry
+            adc Temp      ; to add random number between 0 and 8 to Temp
+            tax           ; X will now be between 0 and 23
             rts
 
 ; Get next random number

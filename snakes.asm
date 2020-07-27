@@ -552,7 +552,11 @@ CheckFruit    lda FruitPosition_Y   ; if invalid we need to place the next fruit
               txa
               jsr CheckPlayField    ; check pos corresponds to a free square
               bvs WaitOver
-              sta FruitPosition_X   ; if so place fruit here
+              cmp HeadPosition_X    ; also check pos is not equal to snakes head
+              bne PlaceFruit
+              cpy HeadPosition_Y
+              beq WaitOver
+PlaceFruit    sta FruitPosition_X   ; if so place fruit here
               sty FruitPosition_Y
 
 WaitOver      jsr GetRandom         ; cycle through random number every frame
